@@ -60,8 +60,30 @@ async function run() {
     try {
         // Connect the client to the server	(optional starting in v4.7)
         await client.connect();
+        const db = client.db("BookCourier")
+        const usersCollection = db.collection('users');
 
 
+        // Section: User Relative API
+        //  api- User create
+        app.post('/users', async (req, res) => {
+            const user = req.body;
+            user.createAt = new Date();
+            const email = user.email;
+            const userExists = await usersCollection.findOne({ email })
+            if (userExists) {
+                return res.send({ message: "user exists" })
+            }
+            const result = await usersCollection.insertOne(user);
+            res.send(result)
+        })
+
+        // api- user get
+        app.get("/users/:email/role", async (req, res) => {
+            const email = req.params.email;
+            const user = await usersCollection.findOne({ email })
+            res.send({ role: user?.role || 'user' })
+        })
 
 
         // Send a ping to confirm a successful connection
