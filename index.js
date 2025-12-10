@@ -5,7 +5,7 @@ const app = express();
 const cors = require('cors')
 const port = process.env.PORT
 // mongoDB import
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 
 // firebase import 
@@ -146,6 +146,23 @@ async function run() {
                 res.status(500).send({ message: "Failed to fetch Books" })
             }
         })
+
+        // api- Get single book by id
+        app.get("/books/:id", async (req, res) => {
+            const id = req.params.id;
+            const result = await booksCollection.findOne({ _id: new ObjectId(id) });
+            res.send(result);
+        });
+
+        // api- Update book by id
+        app.put("/books/:id", async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const updateBook = { $set: req.body };
+            const result = await booksCollection.updateOne(query, updateBook);
+            res.send(result);
+        });
+
 
         // Section: MongoDB connection check
         // Send a ping to confirm a successful connection
