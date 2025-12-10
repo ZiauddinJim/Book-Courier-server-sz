@@ -62,6 +62,7 @@ async function run() {
         await client.connect();
         const db = client.db("BookCourier")
         const usersCollection = db.collection('users');
+        const booksCollection = db.collection('books');
 
 
         // Section: User Relative API
@@ -78,7 +79,7 @@ async function run() {
             res.send(result)
         })
 
-        // api- user get
+        // api- single user get
         app.get("/users/:email/role", async (req, res) => {
             const email = req.params.email;
             const user = await usersCollection.findOne({ email })
@@ -125,6 +126,28 @@ async function run() {
             }
         });
 
+        // Section: Book Relative Api
+        // api- Create Book
+        app.post("/books", async (req, res) => {
+            try {
+                const books = await booksCollection.insertOne(req.body)
+                res.send(books)
+            } catch (error) {
+                res.status(500).send({ message: "Failed to Book Insert" })
+            }
+        })
+
+        // api- get books
+        app.get("/books/:email/myBooks", async (req, res) => {
+            try {
+                const books = await booksCollection.find({}).toArray();
+                res.send(books)
+            } catch (error) {
+                res.status(500).send({ message: "Failed to fetch Books" })
+            }
+        })
+
+        // Section: MongoDB connection check
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
