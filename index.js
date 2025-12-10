@@ -85,6 +85,45 @@ async function run() {
             res.send({ role: user?.role || 'user' })
         })
 
+        // api- user update
+        app.patch("/users/:email/update", async (req, res) => {
+            const email = req.params.email;
+            const query = { email: email }
+            const update = {
+                $set: {
+                    displayName: req.body.displayName,
+                    photoURL: req.body.photoURL
+                }
+            }
+            const user = await usersCollection.updateOne(query, update)
+            res.send(user)
+        })
+
+        // api- Get all users
+        app.get('/users', async (req, res) => {
+            try {
+                const users = await usersCollection.find({}).toArray();
+                res.send(users);
+            } catch (error) {
+                res.status(500).send({ message: "Failed to fetch users" });
+            }
+        });
+
+        // api- Update user role
+        app.patch('/users/:email/role', async (req, res) => {
+            try {
+                const email = req.params.email;
+                const { role } = req.body;
+                const query = { email: email };
+                const update = {
+                    $set: { role: role }
+                };
+                const result = await usersCollection.updateOne(query, update);
+                res.send(result);
+            } catch (error) {
+                res.status(500).send({ message: "Failed to update role" });
+            }
+        });
 
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
