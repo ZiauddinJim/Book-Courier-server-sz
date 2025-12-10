@@ -137,15 +137,49 @@ async function run() {
             }
         })
 
-        // api- get books
+        // Put the more specific route FIRST
         app.get("/books/:email/myBooks", async (req, res) => {
             try {
-                const books = await booksCollection.find({}).toArray();
-                res.send(books)
+                const email = req.params.email;
+                const books = await booksCollection.find({ librarianEmail: email }).toArray();
+                res.send(books);
             } catch (error) {
-                res.status(500).send({ message: "Failed to fetch Books" })
+                res.status(500).send({ message: "Failed to fetch Books" });
             }
-        })
+        });
+
+        // Then the general route
+        app.get("/books", async (req, res) => {
+            try {
+                const { search, category, maxPrice, status } = req.query;
+                let query = {};
+
+                if (status) query.status = status;
+
+                if (search) {
+                    query.$or = [
+                        { title: { $regex: search, $options: "i" } },
+                        { author: { $regex: search, $options: "i" } }
+                    ];
+                }
+
+                if (category) {
+                    query.category = category;
+                }
+
+                if (maxPrice) {
+                    query.price = { $lte: Number(maxPrice) };
+                }
+
+                const items = await booksCollection.find(query).toArray();
+                res.send(items);
+            } catch (error) {
+                console.error("Error fetching books:", error); // Add logging
+                res.status(500).send({ message: "Failed to fetch filtered data" });
+            }
+        });
+
+
 
         // api- Get single book by id
         app.get("/books/:id", async (req, res) => {
