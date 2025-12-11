@@ -22,27 +22,36 @@ app.use(cors());
 app.use(express.json());
 
 // Section: Firebase verify middleware
-const firebaseVerifyToken = async (req, res, next) => {
-    // console.log(req.headers.authorization);
-    // console.log("i am from firebase middleware.");
-    if (!req.headers.authorization) {
-        return res.status(401).send({ message: "unauthorize request!" })
-    }
-    const token = req.headers.authorization.split(" ")[1]
-    // console.log(token);
+const verifyFBToken = async (req, res, next) => {
+    const token = req.headers.authorization;
+
     if (!token) {
-        return res.status(401).send({ message: "Token is not authorize!" })
+        return res.status(401).send({ message: 'unauthorized access' })
     }
-    // verify id token
+
     try {
-        const tokenInfo = await admin.auth().verifyIdToken(token)
-        req.token_email = tokenInfo.email;
-        // console.log("after token validation:", tokenInfo);
-        next()
-    } catch (error) {
-        console.log(error);
-        return res.status(401).send({ message: "Token is not authorize!" })
+        const idToken = token.split(' ')[1];
+        const decoded = await admin.auth().verifyIdToken(idToken);
+        console.log('decoded in the token', decoded);
+        req.decoded_email = decoded.email;
+        next();
     }
+    catch (err) {
+        return res.status(401).send({ message: 'unauthorized access' })
+    }
+}
+
+// Section: Middle admin before allowing admin activity
+// must be used after verifyFBToken middleware
+const verifyAdmin = async (req, res, next) => {
+    const email = req.decoded_email;
+    const query = { email };
+    const user = await userCollection.findOne(query);
+
+    if (!user || user.role !== 'admin') {
+        return res.status(403).send({ message: 'forbidden access' });
+    }
+    next();
 }
 
 // connect mongoDB
@@ -197,6 +206,11 @@ async function run() {
             const result = await booksCollection.updateOne(query, updateBook);
             res.send(result);
         });
+
+        // api- Book delete
+        app.delete("/books/:id", async (req, res) => {
+
+        })
 
         // Section: Order
         // Place an order
