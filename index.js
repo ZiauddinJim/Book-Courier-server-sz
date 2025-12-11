@@ -63,6 +63,8 @@ async function run() {
         const db = client.db("BookCourier")
         const usersCollection = db.collection('users');
         const booksCollection = db.collection('books');
+        const ordersCollection = db.collection('orders');
+
 
 
         // Section: User Relative API
@@ -179,8 +181,6 @@ async function run() {
             }
         });
 
-
-
         // api- Get single book by id
         app.get("/books/:id", async (req, res) => {
             const id = req.params.id;
@@ -197,6 +197,18 @@ async function run() {
             res.send(result);
         });
 
+        // Place an order
+        app.post("/orders", async (req, res) => {
+            const orderData = req.body;
+            const result = await ordersCollection.insertOne(orderData);
+            res.send(result);
+        });
+        // Get orders by user email (for My Orders page)
+        app.get("/orders/:email", async (req, res) => {
+            const email = req.params.email;
+            const result = await ordersCollection.find({ userEmail: email }).toArray();
+            res.send(result);
+        });
 
         // Section: MongoDB connection check
         // Send a ping to confirm a successful connection
