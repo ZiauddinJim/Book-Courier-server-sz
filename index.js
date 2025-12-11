@@ -57,6 +57,10 @@ const client = new MongoClient(uri, {
     }
 });
 
+function generateTrackingId() {
+    return "TRK-" + Math.random().toString(36).substring(2, 10).toUpperCase();
+}
+
 async function run() {
     try {
         // Connect the client to the server	(optional starting in v4.7)
@@ -67,6 +71,10 @@ async function run() {
         const ordersCollection = db.collection('orders');
         const wishlistCollection = db.collection('wishlist');
         const reviewsCollection = db.collection('reviews');
+        const paymentsCollection = db.collection('payments');
+
+        await paymentsCollection.createIndex({ transactionId: 1 }, { unique: true })
+
 
 
         // Section: Middle admin before allowing admin activity
@@ -307,6 +315,123 @@ async function run() {
             const result = await ordersCollection.updateOne(query, update);
             res.send(result);
         });
+
+        // Section: Payment relative API
+        // api- my order page to go stripe payment API
+        app.post("/payment-checkout-session", async (req, res) => {
+            const paymentInfo = req.body;
+            const amount = parseInt(paymentInfo.price) * 100;
+            const session = await stripe.checkout.sessions.create({
+                line_items: [
+                    {
+                        price_data: {
+                            currency: "BDT",
+                            unit_amount: amount,
+                            product_data: {
+                                name: `Please pay for: ${paymentInfo.bookTitle}`,
+                            }
+                        },
+                        quantity: 1,
+                    },
+                ],
+                // customer: paymentInfo.senderName,
+                customer_email: paymentInfo.userEmail,
+                metadata: {
+                    orderId: paymentInfo._id,
+                    bookTitle: paymentInfo.bookTitle,
+                },
+                mode: 'payment',
+                success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success?success=true&session_id={CHECKOUT_SESSION_ID}`,
+                cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-cancelled`,
+            })
+            console.log(session);
+            res.send({ url: session.url });
+        })
+
+        // api- payment success api
+        app.patch("/payment-success", async (req, res) => {
+            try {
+                const sessionId = req.query.session_id;
+                const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+                const transactionId = session.payment_intent;
+                const orderId = session.metadata.orderId;
+
+                // STEP 1: Check duplicate FIRST
+                const existingPayment = await paymentsCollection.findOne({ transactionId });
+
+                if (existingPayment) {
+                    return res.send({
+                        success: true,
+                        message: "Payment already exists",
+                        transactionId,
+                        trackingId: existingPayment.trackingId
+                    });
+                }
+
+                // STEP 2: Ensure payment was successful
+                if (session.payment_status !== "paid") {
+                    return res.send({ success: false, message: "Payment not completed" });
+                }
+
+                const trackingId = generateTrackingId();
+
+                // STEP 3: Update order
+                await ordersCollection.updateOne(
+                    { _id: new ObjectId(orderId) },
+                    {
+                        $set: {
+                            paymentStatus: "paid",
+                            status: "processing",
+                            transactionId,
+                            trackingId
+                        }
+                    }
+                );
+
+                // STEP 4: Save payment → catch duplicates by index
+                const paymentData = {
+                    sessionId,
+                    transactionId,
+                    orderId,
+                    bookTitle: session.metadata.bookTitle,
+                    customerEmail: session.customer_email,
+                    amount: session.amount_total / 100,
+                    currency: session.currency,
+                    paymentStatus: session.payment_status,
+                    trackingId,
+                    paidAt: new Date()
+                };
+
+                try {
+                    await paymentsCollection.insertOne(paymentData);
+                } catch (err) {
+
+                    if (err.code === 11000) {
+                        const existing = await paymentsCollection.findOne({ transactionId });
+                        return res.send({
+                            success: true,
+                            message: "Payment already exists",
+                            transactionId,
+                            trackingId: existing.trackingId
+                        });
+                    }
+                    throw err;
+                }
+
+                res.send({
+                    success: true,
+                    message: "Payment recorded successfully",
+                    transactionId,
+                    trackingId
+                });
+
+            } catch (error) {
+                console.error("Payment error:", error);
+                res.status(500).send({ success: false, message: "Payment processing failed" });
+            }
+        });
+        
 
         // Section: Wishlist
         // Add to Wishlist
