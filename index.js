@@ -382,7 +382,7 @@ async function run() {
                     {
                         $set: {
                             paymentStatus: "paid",
-                            status: "processing",
+                            status: "pending",
                             transactionId,
                             trackingId
                         }
@@ -431,7 +431,15 @@ async function run() {
                 res.status(500).send({ success: false, message: "Payment processing failed" });
             }
         });
-        
+
+        app.get("/payment/:email", verifyFBToken, async (req, res) => {
+            const email = req.params.email;
+            if (req.decoded_email !== email) {
+                return res.status(403).send({ message: 'forbidden access' });
+            }
+            const result = await paymentsCollection.find({ customerEmail: email }).toArray();
+            res.send(result)
+        })
 
         // Section: Wishlist
         // Add to Wishlist
