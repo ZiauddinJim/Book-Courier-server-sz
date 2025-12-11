@@ -64,7 +64,8 @@ async function run() {
         const usersCollection = db.collection('users');
         const booksCollection = db.collection('books');
         const ordersCollection = db.collection('orders');
-
+        const wishlistCollection = db.collection('wishlist');
+        const reviewsCollection = db.collection('reviews');
 
 
         // Section: User Relative API
@@ -197,6 +198,7 @@ async function run() {
             res.send(result);
         });
 
+        // Section: Order
         // Place an order
         app.post("/orders", async (req, res) => {
             const orderData = req.body;
@@ -207,6 +209,57 @@ async function run() {
         app.get("/orders/:email", async (req, res) => {
             const email = req.params.email;
             const result = await ordersCollection.find({ userEmail: email }).toArray();
+            res.send(result);
+        });
+
+        // Cancel Order (or Delete)
+        app.delete("/orders/:id", async (req, res) => {
+            const id = req.params.id;
+            const result = await ordersCollection.deleteOne({ _id: new ObjectId(id) });
+            res.send(result);
+        });
+
+        // Section: Wishlist
+        // Add to Wishlist
+        app.post("/wishlist", async (req, res) => {
+            const wishlistData = req.body;
+
+            // Check if already in wishlist
+            const existing = await wishlistCollection.findOne({
+                bookId: wishlistData.bookId,
+                userEmail: wishlistData.userEmail
+            });
+
+            if (existing) {
+                return res.send({ message: "Already in wishlist", insertedId: null });
+            }
+            const result = await wishlistCollection.insertOne(wishlistData);
+            res.send(result);
+        });
+        // Get Wishlist by user
+        app.get("/wishlist/:email", async (req, res) => {
+            const email = req.params.email;
+            const result = await wishlistCollection.find({ userEmail: email }).toArray();
+            res.send(result);
+        });
+        // Remove from Wishlist
+        app.delete("/wishlist/:id", async (req, res) => {
+            const id = req.params.id;
+            const result = await wishlistCollection.deleteOne({ _id: new ObjectId(id) });
+            res.send(result);
+        });
+
+        // Add a review
+        app.post("/reviews", async (req, res) => {
+            const reviewData = req.body;
+            // { bookId: "...", userEmail: "...", rating: 5, comment: "..." }
+            const result = await reviewsCollection.insertOne(reviewData);
+            res.send(result);
+        });
+        // Get reviews for a book
+        app.get("/reviews/:bookId", async (req, res) => {
+            const bookId = req.params.bookId;
+            const result = await reviewsCollection.find({ bookId: bookId }).toArray();
             res.send(result);
         });
 
