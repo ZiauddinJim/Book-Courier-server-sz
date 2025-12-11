@@ -8,6 +8,9 @@ const port = process.env.PORT
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 
+const stripe = require('stripe')(process.env.STRIPE_SECRET);
+
+
 // firebase import 
 const admin = require("firebase-admin");
 const decoded = Buffer.from(process.env.FB_SERVICE_KEY, "base64").toString("utf8");
@@ -164,6 +167,17 @@ async function run() {
             }
         })
 
+        // api- Latest Book home page
+        app.get('/latest-books', async (req, res) => {
+            try {
+                const result = await booksCollection.find().sort({ createdAt: -1 }).limit(10).toArray();
+                res.send(result);
+            } catch (error) {
+                res.status(500).send({ message: "Failed to fetch latest books" });
+            }
+        });
+
+
         // Put the more specific route FIRST
         app.get("/books/:email/myBooks", async (req, res) => {
             try {
@@ -231,7 +245,7 @@ async function run() {
         // api- // admin Expect { status: 'published' | 'unpublished' }
         app.patch('/books/:id', verifyFBToken, verifyAdmin, async (req, res) => {
             const id = req.params.id;
-            const { status } = req.body; 
+            const { status } = req.body;
             const filter = { _id: new ObjectId(id) };
             const updateDoc = {
                 $set: { status: status }
@@ -253,21 +267,40 @@ async function run() {
         });
 
         // Section: Order
-        // Place an order
-        app.post("/orders", async (req, res) => {
+        // api- Place an order
+        app.post("/orders", verifyFBToken, async (req, res) => {
             const orderData = req.body;
-            const result = await ordersCollection.insertOne(orderData);
-            res.send(result);
+            if (orderData.userEmail !== req.decoded_email) {
+                return res.status(403).send({ message: "Forbidden: cannot place order for another user" });
+            }
+            try {
+                const result = await ordersCollection.insertOne(orderData);
+                res.send(result);
+            } catch (error) {
+                console.error(error);
+                res.status(500).send({ message: "Failed to place order" });
+            }
         });
+
         // Get orders by user email (for My Orders page)
-        app.get("/orders/:email", async (req, res) => {
+        app.get("/orders/:email", verifyFBToken, async (req, res) => {
             const email = req.params.email;
             const result = await ordersCollection.find({ userEmail: email }).toArray();
             res.send(result);
         });
 
+        // Get orders by user email (for My Orders page)
+        app.get("/orders/:email", verifyFBToken, async (req, res) => {
+            const email = req.params.email;
+            if (req.decoded_email !== email) {
+                return res.status(403).send({ message: 'forbidden access' });
+            }
+            const result = await ordersCollection.find({ userEmail: email }).toArray();
+            res.send(result);
+        });
+
         // Cancel Order (or patch status update)
-        app.patch("/orders/:id", async (req, res) => {
+        app.patch("/orders/:id", verifyFBToken, async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) };
             const update = { $set: req.body }
