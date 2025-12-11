@@ -41,30 +41,7 @@ const verifyFBToken = async (req, res, next) => {
     }
 }
 
-// Section: Middle admin before allowing admin activity
-// must be used after verifyFBToken middleware
-const verifyAdmin = async (req, res, next) => {
-    const email = req.decoded_email;
-    const query = { email };
-    const user = await userCollection.findOne(query);
 
-    if (!user || user.role !== 'admin') {
-        return res.status(403).send({ message: 'forbidden access' });
-    }
-    next();
-}
-// Section: Middle librarian before allowing librarian activity
-// must be used after verifyFBToken middleware
-const verifyLibrarian = async (req, res, next) => {
-    const email = req.decoded_email;
-    const query = { email };
-    const user = await userCollection.findOne(query);
-
-    if (!user || user.role !== 'librarian') {
-        return res.status(403).send({ message: 'forbidden access' });
-    }
-    next();
-}
 
 // connect mongoDB
 const uri = process.env.URI
@@ -87,6 +64,32 @@ async function run() {
         const ordersCollection = db.collection('orders');
         const wishlistCollection = db.collection('wishlist');
         const reviewsCollection = db.collection('reviews');
+
+
+        // Section: Middle admin before allowing admin activity
+        // must be used after verifyFBToken middleware
+        const verifyAdmin = async (req, res, next) => {
+            const email = req.decoded_email;
+            const query = { email };
+            const user = await usersCollection.findOne(query);
+
+            if (!user || user.role !== 'admin') {
+                return res.status(403).send({ message: 'forbidden access' });
+            }
+            next();
+        }
+        // Section: Middle librarian before allowing librarian activity
+        // must be used after verifyFBToken middleware
+        const verifyLibrarian = async (req, res, next) => {
+            const email = req.decoded_email;
+            const query = { email };
+            const user = await usersCollection.findOne(query);
+
+            if (!user || user.role !== 'librarian') {
+                return res.status(403).send({ message: 'forbidden access' });
+            }
+            next();
+        }
 
 
         // Section: User Relative API
@@ -172,6 +175,12 @@ async function run() {
             }
         });
 
+        // api- user all books
+        app.get('/all-books', async (req, res) => {
+            const result = await booksCollection.find().toArray();
+            res.send(result);
+        });
+
         // Then the general route
         app.get("/books", async (req, res) => {
             try {
@@ -219,10 +228,29 @@ async function run() {
             res.send(result);
         });
 
-        // api- Book delete
-        app.delete("/books/:id", async (req, res) => {
+        // api- // admin Expect { status: 'published' | 'unpublished' }
+        app.patch('/books/:id', verifyFBToken, verifyAdmin, async (req, res) => {
+            const id = req.params.id;
+            const { status } = req.body; 
+            const filter = { _id: new ObjectId(id) };
+            const updateDoc = {
+                $set: { status: status }
+            };
+            const result = await booksCollection.updateOne(filter, updateDoc);
+            res.send(result);
+        });
 
-        })
+        // api- Book delete
+        app.delete('/books/:id', verifyFBToken, verifyAdmin, async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const result = await booksCollection.deleteOne(query);
+            const deleteOrdersResult = await ordersCollection.deleteMany({ bookId: id });
+            res.send({
+                deletedCount: result.deletedCount,
+                ordersDeletedCount: deleteOrdersResult.deletedCount
+            });
+        });
 
         // Section: Order
         // Place an order
