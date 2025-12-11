@@ -212,10 +212,12 @@ async function run() {
             res.send(result);
         });
 
-        // Cancel Order (or Delete)
-        app.delete("/orders/:id", async (req, res) => {
+        // Cancel Order (or patch status update)
+        app.patch("/orders/:id", async (req, res) => {
             const id = req.params.id;
-            const result = await ordersCollection.deleteOne({ _id: new ObjectId(id) });
+            const query = { _id: new ObjectId(id) };
+            const update = { $set: req.body }
+            const result = await ordersCollection.updateOne(query, update);
             res.send(result);
         });
 
