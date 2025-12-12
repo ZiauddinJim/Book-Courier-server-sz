@@ -2,3 +2,5 @@ firebase-adminsdk.json
 .env
 node_modules
 todo.yaml
+.vercel
+vercel.json
