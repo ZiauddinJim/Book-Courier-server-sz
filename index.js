@@ -513,6 +513,62 @@ async function run() {
             res.send(result);
         });
 
+        // Section: Dashboard Stats
+        // Admin Stats
+        app.get('/admin-stats', verifyFBToken, verifyAdmin, async (req, res) => {
+            try {
+                const totalUsers = await usersCollection.estimatedDocumentCount();
+                const totalBooks = await booksCollection.estimatedDocumentCount();
+                const totalOrders = await ordersCollection.estimatedDocumentCount();
+                // Revenue calculation (sum filter payments for paid orders)
+                // Assuming payment-success creates records in paymentsCollection with amount
+                const payments = await paymentsCollection.find({}).toArray();
+                const revenue = payments.reduce((acc, curr) => acc + curr.amount, 0);
+
+                res.send({ totalUsers, totalBooks, totalOrders, revenue });
+            } catch (error) {
+                console.error("Admin stats error:", error);
+                res.status(500).send({ message: "Failed to fetch admin stats" });
+            }
+        });
+
+        // Librarian Stats
+        app.get('/librarian-stats/:email', verifyFBToken, verifyLibrarian, async (req, res) => {
+            try {
+                const email = req.params.email;
+                if (req.decoded_email !== email) {
+                    return res.status(403).send({ message: "Forbidden Access" });
+                }
+                const myBooksCount = await booksCollection.countDocuments({ librarianEmail: email });
+                // Assuming librarian-orders logic checks for books ordered that belong to this librarian
+                // This might be complex if orders don't store librarianEmail directly. 
+                // Based on previous code: app.get('/librarian-orders/:email' ... finds { librarianEmail: email }
+                // So orders DO have librarianEmail.
+                const myOrdersCount = await ordersCollection.countDocuments({ librarianEmail: email });
+                res.send({ myBooksCount, myOrdersCount });
+            } catch (error) {
+                console.error("Librarian stats error:", error);
+                res.status(500).send({ message: "Failed to fetch librarian stats" });
+            }
+        });
+
+        // User Stats
+        app.get('/user-stats/:email', verifyFBToken, async (req, res) => {
+            try {
+                const email = req.params.email;
+                if (req.decoded_email !== email) {
+                    return res.status(403).send({ message: "Forbidden Access" });
+                }
+
+                const myOrdersCount = await ordersCollection.countDocuments({ userEmail: email });
+                const myWishlistCount = await wishlistCollection.countDocuments({ userEmail: email });
+                res.send({ myOrdersCount, myWishlistCount });
+            } catch (error) {
+                console.error("User stats error:", error);
+                res.status(500).send({ message: "Failed to fetch user stats" });
+            }
+        });
+
         // Section: MongoDB connection check
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
