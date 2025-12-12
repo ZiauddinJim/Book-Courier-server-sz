@@ -35,7 +35,7 @@ const verifyFBToken = async (req, res, next) => {
     try {
         const idToken = token.split(' ')[1];
         const decoded = await admin.auth().verifyIdToken(idToken);
-        console.log('decoded in the token', decoded);
+        // console.log('decoded in the token', decoded);
         req.decoded_email = decoded.email;
         next();
     }
@@ -293,7 +293,7 @@ async function run() {
         // Get orders by user email (for My Orders page)
         app.get("/orders/:email", verifyFBToken, async (req, res) => {
             const email = req.params.email;
-            const result = await ordersCollection.find({ userEmail: email }).toArray();
+            const result = await ordersCollection.find({ userEmail: email }).sort({ orderDate: -1 }).toArray();
             res.send(result);
         });
 
@@ -315,6 +315,34 @@ async function run() {
             const result = await ordersCollection.updateOne(query, update);
             res.send(result);
         });
+
+        // Section: this role use librarian & librarian orders page
+        // api- Get orders for a specific Librarian
+        app.get('/librarian-orders/:email', verifyFBToken, async (req, res) => {
+            const email = req.params.email;
+            if (!email) {
+                return res.status(400).json({ error: "Email parameter is required." });
+            }
+            const result = await ordersCollection.find({ librarianEmail: email }).sort({ orderDate: -1 }).toArray();
+            res.send(result);
+        })
+
+        // api- this api use librarian orders dashboard
+        app.patch('/handleCancelOrder/:id', verifyFBToken, verifyLibrarian, async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const update = { $set: req.body }
+            const result = await ordersCollection.updateOne(query, update)
+            res.send(result)
+        })
+
+        app.patch('/handleStatusChange/:id', verifyFBToken, verifyLibrarian, async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const update = { $set: req.body }
+            const result = await ordersCollection.updateOne(query, update)
+            res.send(result)
+        })
 
         // Section: Payment relative API
         // api- my order page to go stripe payment API
@@ -344,7 +372,7 @@ async function run() {
                 success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success?success=true&session_id={CHECKOUT_SESSION_ID}`,
                 cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-cancelled`,
             })
-            console.log(session);
+            // console.log(session);
             res.send({ url: session.url });
         })
 
