@@ -125,9 +125,12 @@ async function run() {
         })
 
         // api- user update
-        app.patch("/users/:email/update", async (req, res) => {
+        app.patch("/users/:email/update", verifyFBToken, async (req, res) => {
             const email = req.params.email;
             const query = { email: email }
+            if (req.decoded_email !== email) {
+                return res.status(403).send({ message: 'forbidden access' });
+            }
             const update = {
                 $set: {
                     displayName: req.body.displayName,
@@ -139,7 +142,7 @@ async function run() {
         })
 
         // api- Get all users
-        app.get('/users', async (req, res) => {
+        app.get('/users', verifyFBToken, verifyAdmin, async (req, res) => {
             try {
                 const users = await usersCollection.find({}).toArray();
                 res.send(users);
@@ -149,7 +152,7 @@ async function run() {
         });
 
         // api- Update user role
-        app.patch('/users/:email/role', async (req, res) => {
+        app.patch('/users/:email/role', verifyFBToken, verifyAdmin, async (req, res) => {
             try {
                 const email = req.params.email;
                 const { role } = req.body;
@@ -166,7 +169,7 @@ async function run() {
 
         // Section: Book Relative Api
         // api- Create Book
-        app.post("/books", async (req, res) => {
+        app.post("/books", verifyFBToken, verifyLibrarian, async (req, res) => {
             try {
                 const books = await booksCollection.insertOne(req.body)
                 res.send(books)
@@ -187,10 +190,14 @@ async function run() {
 
 
         // Put the more specific route FIRST
-        app.get("/books/:email/myBooks", async (req, res) => {
+        app.get("/books/:email/myBooks", verifyFBToken, verifyLibrarian, async (req, res) => {
             try {
                 const email = req.params.email;
-                const books = await booksCollection.find({ librarianEmail: email }).toArray();
+                // Security check
+                if (req.decoded_email !== email) {
+                    return res.status(403).send({ message: 'forbidden access' });
+                }
+                const books = await booksCollection.find({ librarianEmail: email }).sort({ createdAt: -1 }).toArray();
                 res.send(books);
             } catch (error) {
                 res.status(500).send({ message: "Failed to fetch Books" });
@@ -242,7 +249,7 @@ async function run() {
         });
 
         // api- Update book by id
-        app.put("/books/:id", async (req, res) => {
+        app.put("/books/:id", verifyFBToken, verifyLibrarian, async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) };
             const updateBook = { $set: req.body };
@@ -293,17 +300,10 @@ async function run() {
         // Get orders by user email (for My Orders page)
         app.get("/orders/:email", verifyFBToken, async (req, res) => {
             const email = req.params.email;
-            const result = await ordersCollection.find({ userEmail: email }).sort({ orderDate: -1 }).toArray();
-            res.send(result);
-        });
-
-        // Get orders by user email (for My Orders page)
-        app.get("/orders/:email", verifyFBToken, async (req, res) => {
-            const email = req.params.email;
             if (req.decoded_email !== email) {
                 return res.status(403).send({ message: 'forbidden access' });
             }
-            const result = await ordersCollection.find({ userEmail: email }).toArray();
+            const result = await ordersCollection.find({ userEmail: email }).sort({ orderDate: -1 }).toArray();
             res.send(result);
         });
 
@@ -318,10 +318,14 @@ async function run() {
 
         // Section: this role use librarian & librarian orders page
         // api- Get orders for a specific Librarian
-        app.get('/librarian-orders/:email', verifyFBToken, async (req, res) => {
+        app.get('/librarian-orders/:email', verifyFBToken, verifyLibrarian, async (req, res) => {
             const email = req.params.email;
             if (!email) {
                 return res.status(400).json({ error: "Email parameter is required." });
+            }
+            // Ensure the librarian is requesting their own orders
+            if (req.decoded_email !== email) {
+                return res.status(403).send({ message: 'forbidden access' });
             }
             const result = await ordersCollection.find({ librarianEmail: email }).sort({ orderDate: -1 }).toArray();
             res.send(result);
@@ -346,9 +350,10 @@ async function run() {
 
         // Section: Payment relative API
         // api- my order page to go stripe payment API
-        app.post("/payment-checkout-session", async (req, res) => {
+        app.post("/payment-checkout-session", verifyFBToken, async (req, res) => {
             const paymentInfo = req.body;
-            const amount = parseInt(paymentInfo.price) * 100;
+            // FIX: Use Math.round to avoid floating point errors and parseInt truncation issues
+            const amount = Math.round(Number(paymentInfo.price) * 100);
             const session = await stripe.checkout.sessions.create({
                 line_items: [
                     {
@@ -471,8 +476,13 @@ async function run() {
 
         // Section: Wishlist
         // Add to Wishlist
-        app.post("/wishlist", async (req, res) => {
+        app.post("/wishlist", verifyFBToken, async (req, res) => {
             const wishlistData = req.body;
+
+            // Security Check
+            if (req.decoded_email !== wishlistData.userEmail) {
+                return res.status(403).send({ message: 'forbidden access' });
+            }
 
             // Check if already in wishlist
             const existing = await wishlistCollection.findOne({
@@ -487,21 +497,29 @@ async function run() {
             res.send(result);
         });
         // Get Wishlist by user
-        app.get("/wishlist/:email", async (req, res) => {
+        app.get("/wishlist/:email", verifyFBToken, async (req, res) => {
             const email = req.params.email;
+            // Security Check
+            if (req.decoded_email !== email) {
+                return res.status(403).send({ message: 'forbidden access' });
+            }
             const result = await wishlistCollection.find({ userEmail: email }).toArray();
             res.send(result);
         });
         // Remove from Wishlist
-        app.delete("/wishlist/:id", async (req, res) => {
+        app.delete("/wishlist/:id", verifyFBToken, async (req, res) => {
             const id = req.params.id;
             const result = await wishlistCollection.deleteOne({ _id: new ObjectId(id) });
             res.send(result);
         });
 
         // Add a review
-        app.post("/reviews", async (req, res) => {
+        app.post("/reviews", verifyFBToken, async (req, res) => {
             const reviewData = req.body;
+            // Security check
+            if (req.decoded_email && reviewData.userEmail && req.decoded_email !== reviewData.userEmail) {
+                return res.status(403).send({ message: 'forbidden access' });
+            }
             // { bookId: "...", userEmail: "...", rating: 5, comment: "..." }
             const result = await reviewsCollection.insertOne(reviewData);
             res.send(result);
