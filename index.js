@@ -73,7 +73,7 @@ async function run() {
         const reviewsCollection = db.collection('reviews');
         const paymentsCollection = db.collection('payments');
 
-        await paymentsCollection.createIndex({ transactionId: 1 }, { unique: true })
+        // await paymentsCollection.createIndex({ transactionId: 1 }, { unique: true })
 
 
 
