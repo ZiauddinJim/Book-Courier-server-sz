@@ -344,6 +344,25 @@ async function run() {
             res.send(result);
         });
 
+        // Check if user has ordered a specific book
+        app.get("/orders/check/:email/:bookId", verifyFBToken, async (req, res) => {
+            const { email, bookId } = req.params;
+            if (req.decoded_email !== email) {
+                return res.status(403).send({ message: 'forbidden access' });
+            }
+            try {
+                const order = await ordersCollection.findOne({
+                    userEmail: email,
+                    bookId: bookId
+                });
+                res.send({ hasOrdered: !!order });
+            } catch (error) {
+                console.error("Error checking order status:", error);
+                res.status(500).send({ message: "Failed to check order status" });
+            }
+        });
+
+
         // Cancel Order (or patch status update)
         app.patch("/orders/:id", verifyFBToken, async (req, res) => {
             const id = req.params.id;
